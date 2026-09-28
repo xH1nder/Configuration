@@ -1,0 +1,15 @@
+{
+  "type": "dir",
+  "name": "/",
+  "children": [
+    {"type": "file", "name": "readme.txt",
+     "content": "Small VFS with several files"},
+    {"type": "file", "name": "notes.txt",
+     "content": "Second file in root"},
+    {"type": "dir", "name": "docs",
+     "children": [
+       {"type": "file", "name": "a.txt", "content": "File A"},
+       {"type": "file", "name": "b.txt", "content": "File B"}
+     ]}
+  ]
+}

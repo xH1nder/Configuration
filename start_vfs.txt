@@ -1,0 +1,7 @@
+ls
+ls /home
+ls /home/user/docs
+cd /home/user
+cd /tmp
+ls a b
+bad_command_here

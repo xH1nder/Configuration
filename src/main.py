@@ -1,13 +1,17 @@
-"""Эмулятор оболочки. Этап 2."""
+"""Эмулятор оболочки. Этап 3."""
 
+import base64
 import datetime
 import getpass
+import json
 import socket
 import sys
 import tkinter as tk
 
 max_cd = 1
 max_exit = 0
+empty_count = 0
+one = 1
 
 window = None
 text = None
@@ -15,6 +19,8 @@ entry = None
 prompt = ""
 log_path = ""
 vfs_path = ""
+vfs_root = None
+cur_dir = "/"
 log_events = []
 
 
@@ -38,6 +44,11 @@ def get_time():
     """Узнать текущее время строкой."""
     now = datetime.datetime.now()
     return now.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def empty_root():
+    """Пустая VFS если файл не задан."""
+    return {"type": "dir", "name": "/", "children": []}
 
 
 def parse(s):
@@ -77,6 +88,86 @@ def parse_args(argv):
         elif part.startswith("--script="):
             script = part[len("--script="):]
     return {"vfs": vfs, "log": log, "script": script}
+
+
+def check_node(node):
+    """Проверить один узел VFS."""
+    if not isinstance(node, dict):
+        return "node must be object"
+    kind = node.get("type", "")
+    name = node.get("name", "")
+    if kind != "dir" and kind != "file":
+        return "bad type"
+    if name == "":
+        return "bad name"
+    if kind == "file":
+        enc = node.get("encoding", "")
+        content = node.get("content", "")
+        if enc == "base64" and content != "":
+            try:
+                base64.b64decode(content, validate=True)
+            except Exception:
+                return "bad base64"
+        return ""
+    kids = node.get("children", [])
+    if not isinstance(kids, list):
+        return "bad children"
+    for kid in kids:
+        bad = check_node(kid)
+        if bad != "":
+            return bad
+    return ""
+
+
+def load_vfs(path):
+    """Загрузить VFS из JSON только в память."""
+    try:
+        f = open(path, "r", encoding="utf-8")
+        data = f.read()
+        f.close()
+    except Exception:
+        return None, "error: vfs file not found: " + path
+    try:
+        root = json.loads(data)
+    except Exception:
+        return None, "error: vfs bad format: bad json"
+    bad = check_node(root)
+    if bad != "":
+        return None, "error: vfs bad format: " + bad
+    return root, ""
+
+
+def count_vfs(node):
+    """Посчитать папки и файлы в VFS."""
+    kind = node.get("type", "")
+    if kind == "file":
+        return (empty_count, one)
+    total_dirs = one
+    total_files = empty_count
+    for kid in node.get("children", []):
+        sub_dirs, sub_files = count_vfs(kid)
+        total_dirs = total_dirs + sub_dirs
+        total_files = total_files + sub_files
+    return (total_dirs, total_files)
+
+
+def find_node(root, path):
+    """Найти узел по пути."""
+    if path == "" or path == "/":
+        return root
+    parts = [p for p in path.split("/") if p != ""]
+    node = root
+    for part in parts:
+        if node.get("type", "") != "dir":
+            return None
+        found = None
+        for kid in node.get("children", []):
+            if kid.get("name", "") == part:
+                found = kid
+        if found is None:
+            return None
+        node = found
+    return node
 
 
 def run_ls(args):
@@ -225,7 +316,8 @@ def run_script_file(path):
         if need_exit:
             window.destroy()
             return True
-    if len(done) < len([x for x in lines if x.strip() != ""]):
+    rest = [x for x in lines if x.strip() != ""]
+    if len(done) < len(rest):
         show("error: script stopped on error")
     return False
 
@@ -234,6 +326,7 @@ def main():
     """Запустить окно."""
     global window, text, entry, prompt
     global log_path, vfs_path, log_events
+    global vfs_root, cur_dir
     args = parse_args(sys.argv[1:])
     vfs_path = args["vfs"]
     log_path = args["log"]
@@ -241,8 +334,6 @@ def main():
     print("VFS: " + vfs_path)
     print("Log: " + log_path)
     print("Script: " + script_path)
-    if vfs_path != "":
-        print("VFS пока не используется, будет на этапе 3")
     log_events = []
     user = get_user()
     host = get_host()
@@ -256,6 +347,26 @@ def main():
     entry.bind("<Return>", on_press)
     show(prompt + "ready, type ls, cd or exit")
     show("VFS=" + vfs_path + " LOG=" + log_path)
+    if vfs_path == "":
+        vfs_root = empty_root()
+        show("VFS empty, run with --vfs file.json")
+    else:
+        root, err = load_vfs(vfs_path)
+        if err != "":
+            show(err)
+            print(err)
+            add_log("vfs " + vfs_path, err)
+            vfs_root = empty_root()
+        else:
+            vfs_root = root
+            found_dirs, found_files = count_vfs(vfs_root)
+            msg = "VFS loaded: " + str(found_dirs)
+            msg = msg + " dirs, " + str(found_files)
+            msg = msg + " files from " + vfs_path
+            show(msg)
+            print(msg)
+            add_log("vfs " + vfs_path, msg)
+    cur_dir = "/"
     if script_path != "":
         show(prompt + "run script: " + script_path)
         bad = run_script_file(script_path)

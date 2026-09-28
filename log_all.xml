@@ -2,32 +2,32 @@
 <log>
   <event>
     <user>User</user>
-    <time>2026-09-28 11:31:25</time>
+    <time>2026-09-28 22:19:21</time>
+    <command>vfs vfs_deep.json</command>
+    <output>VFS loaded: 4 dirs, 4 files from vfs_deep.json</output>
+  </event>
+  <event>
+    <user>User</user>
+    <time>2026-09-28 22:19:21</time>
     <command>ls</command>
     <output>ls</output>
   </event>
   <event>
     <user>User</user>
-    <time>2026-09-28 11:31:25</time>
+    <time>2026-09-28 22:19:21</time>
     <command>ls /tmp home</command>
     <output>ls: /tmp home</output>
   </event>
   <event>
     <user>User</user>
-    <time>2026-09-28 11:31:25</time>
+    <time>2026-09-28 22:19:21</time>
     <command>cd /tmp</command>
     <output>cd: /tmp</output>
   </event>
   <event>
     <user>User</user>
-    <time>2026-09-28 11:31:25</time>
+    <time>2026-09-28 22:19:21</time>
     <command>ls docs</command>
     <output>ls: docs</output>
-  </event>
-  <event>
-    <user>User</user>
-    <time>2026-09-28 11:31:29</time>
-    <command>exit</command>
-    <output>exit</output>
   </event>
 </log>

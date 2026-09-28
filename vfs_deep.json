@@ -1,0 +1,24 @@
+{
+  "type": "dir",
+  "name": "/",
+  "children": [
+    {"type": "file", "name": "readme.txt",
+     "content": "Deep VFS root file"},
+    {"type": "dir", "name": "home",
+     "children": [
+       {"type": "dir", "name": "user",
+        "children": [
+          {"type": "dir", "name": "docs",
+           "children": [
+             {"type": "file", "name": "report.txt",
+              "content": "Report in deep folder"},
+             {"type": "file", "name": "data.txt",
+              "content": "Some data here"}
+           ]},
+          {"type": "file", "name": "photo.bin",
+           "encoding": "base64",
+           "content": "aGVsbG8gd29ybGQ="}
+        ]}
+     ]}
+  ]
+}
