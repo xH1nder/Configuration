@@ -1,0 +1,4 @@
+ls
+ls /tmp home
+cd /tmp
+ls docs
