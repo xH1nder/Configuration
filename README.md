@@ -1,4 +1,4 @@
-# Практическая работа, Вариант №19, Этапы 1-3
+# Практическая работа, Вариант №19, Этапы 1-4
 
 Эмулятор командной строки UNIX.
 Сделан на Python + tkinter.
@@ -21,17 +21,6 @@
 4. Сделал команду exit - закрывает окно.
 5. Добавил ошибки: неизвестная команда и
    неверные аргументы.
-
-Примеры этапа 1:
-
-```
-user@host:~$ ls /tmp home
-ls: /tmp home
-user@host:~$ cd a b
-cd: too many arguments
-user@host:~$ foo
-error: unknown command 'foo'
-```
 
 ## Этап 2. Конфигурация
 
@@ -62,34 +51,6 @@ error: unknown command 'foo'
    нашлось, например VFS loaded: 4 dirs, 3 files.
 3. Ошибки загрузки показываются в окне и в консоли:
    файл не найден, битый json, неверный формат.
-4. Настоящие команды ls и cd по папкам VFS
-   будут на этапе 4, пока заглушки как раньше.
-
-Новые функции этапа 3:
-
-- empty_root дает пустую VFS без файла,
-- check_node проверяет один узел,
-- load_vfs грузит JSON только в память,
-- count_vfs считает папки и файлы,
-- find_node ищет узел по пути.
-
-Пример VFS (vfs_deep.json, 3 уровня и base64):
-
-```json
-{"type": "dir", "name": "/",
- "children": [
-  {"type": "dir", "name": "home",
-   "children": [
-    {"type": "dir", "name": "user",
-     "children": [
-      {"type": "dir", "name": "docs",
-       "children": [
-        {"type": "file", "name": "report.txt",
-         "content": "Report in deep folder"}]},
-      {"type": "file", "name": "photo.bin",
-       "encoding": "base64",
-       "content": "aGVsbG8gd29ybGQ="}]}]}]}
-```
 
 Файлы VFS для проверки:
 
@@ -98,18 +59,77 @@ error: unknown command 'foo'
 - vfs_deep.json - 3 уровня и base64,
 - vfs_bad.json - неверный формат для ошибки.
 
+## Этап 4. Основные команды
+
+Что добавлено:
+
+1. Настоящие ls и cd по папкам VFS в памяти:
+   ls показывает файлы и папки, папки с /,
+   cd меняет текущую папку, понимает .. и .
+   и относительные пути.
+2. Новая команда pwd - показывает текущую папку.
+3. Новая команда tree - показывает дерево папок.
+4. Приглашение теперь показывает папку:
+   user@host:/home/user$ вместо user@host:~$.
+5. Ошибки как в UNIX: no such file or directory,
+   not a directory, too many arguments.
+   Все изменения только в памяти, файл VFS
+   на диске не меняется.
+
+Новые функции этапа 4:
+
+- get_root берет корень VFS,
+- join_path склеивает путь с текущей папкой,
+- make_prompt собирает приглашение с папкой,
+- run_ls настоящий листинг папки,
+- run_cd меняет cur_dir,
+- run_pwd возвращает cur_dir,
+- tree_lines и run_tree рисуют дерево.
+
+Примеры этапа 4 на vfs_deep.json:
+
+```
+user@host:/$ pwd
+/
+user@host:/$ ls
+readme.txt home/
+user@host:/$ ls /home/user/docs
+report.txt data.txt
+user@host:/$ ls /readme.txt
+readme.txt
+user@host:/$ cd /home/user
+user@host:/home/user$ pwd
+/home/user
+user@host:/home/user$ ls
+docs/ photo.bin
+user@host:/home/user$ tree /home
+/home
+  user/
+    docs/
+      report.txt
+      data.txt
+    photo.bin
+user@host:/home/user$ cd ..
+user@host:/home$ pwd
+/home
+user@host:/home$ ls /nope
+ls: no such file or directory: /nope
+user@host:/home$ cd /readme.txt
+cd: not a directory: /readme.txt
+```
+
 ## Что где лежит
 
-- src/main.py - весь код этапов 1-3.
-- tests/test_main.py - 15 тестов.
+- src/main.py - весь код этапов 1-4.
+- tests/test_main.py - 24 теста.
 - start_good.txt, start_bad.txt - скрипты этапа 2.
-- start_vfs.txt - скрипт этапа 3 со всеми
-  командами и ошибкой в конце.
+- start_vfs.txt - скрипт этапа 3.
+- start_stage4.txt - скрипт этапа 4 со всеми
+  командами ls, cd, pwd, tree и ошибкой в конце.
 - test_log.bat, test_script.bat, test_all.bat -
   проверка параметров.
-- test_vfs.bat - проверка всех вариантов VFS:
-  минимальный, несколько файлов, 3 уровня,
-  битый файл и отсутствующий файл.
+- test_vfs.bat - проверка всех вариантов VFS.
+- test_stage4.bat - проверка команд этапа 4.
 - vfs_min.json, vfs_small.json, vfs_deep.json,
   vfs_bad.json - варианты VFS.
 
@@ -121,10 +141,10 @@ error: unknown command 'foo'
 run.bat
 ```
 
-С VFS и скриптом:
+С VFS и скриптом этапа 4:
 
 ```bat
-run.bat --vfs vfs_deep.json --log log.xml --script start_vfs.txt
+run.bat --vfs vfs_deep.json --log log.xml --script start_stage4.txt
 ```
 
 Тесты:
@@ -140,6 +160,7 @@ test_log.bat
 test_script.bat
 test_all.bat
 test_vfs.bat
+test_stage4.bat
 ```
 
 ## Пример лога log.xml
@@ -150,34 +171,10 @@ test_vfs.bat
   <event>
     <user>nikita</user>
     <time>2026-09-28 10:00:00</time>
-    <command>ls /tmp</command>
-    <output>ls: /tmp</output>
+    <command>ls</command>
+    <output>readme.txt home/</output>
   </event>
 </log>
 ```
 
-## Примеры этапа 3
-
-Хорошая VFS грузится и показывает счет:
-
-```
-VFS loaded: 4 dirs, 3 files from vfs_deep.json
-user@host:~$ run script: start_vfs.txt
-user@host:~$ ls /home
-ls: /home
-script finished with error
-```
-
-Битая VFS дает ошибку:
-
-```
-error: vfs bad format: bad type
-```
-
-Нет файла тоже ошибка:
-
-```
-error: vfs file not found: no_such.json
-```
-
-Этапы 1-3 выполнены.
+Этапы 1-4 выполнены.

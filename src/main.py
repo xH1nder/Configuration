@@ -10,8 +10,13 @@ import tkinter as tk
 
 max_cd = 1
 max_exit = 0
+max_ls = 1
+max_tree = 1
+max_pwd = 0
 empty_count = 0
 one = 1
+my_user = "user"
+my_host = "host"
 
 window = None
 text = None
@@ -81,13 +86,31 @@ def parse_args(argv):
             wait = "log"
         elif part == "--script":
             wait = "script"
-        elif part.startswith("--vfs="):
-            vfs = part[len("--vfs="):]
-        elif part.startswith("--log="):
-            log = part[len("--log="):]
-        elif part.startswith("--script="):
-            script = part[len("--script="):]
     return {"vfs": vfs, "log": log, "script": script}
+
+
+def check_file(node):
+    """Проверить файл VFS."""
+    enc = node.get("encoding", "")
+    content = node.get("content", "")
+    if enc == "base64" and content != "":
+        try:
+            base64.b64decode(content, validate=True)
+        except Exception:
+            return "bad base64"
+    return ""
+
+
+def check_dir(node):
+    """Проверить папку VFS."""
+    kids = node.get("children", [])
+    if not isinstance(kids, list):
+        return "bad children"
+    for kid in kids:
+        bad = check_node(kid)
+        if bad != "":
+            return bad
+    return ""
 
 
 def check_node(node):
@@ -101,22 +124,8 @@ def check_node(node):
     if name == "":
         return "bad name"
     if kind == "file":
-        enc = node.get("encoding", "")
-        content = node.get("content", "")
-        if enc == "base64" and content != "":
-            try:
-                base64.b64decode(content, validate=True)
-            except Exception:
-                return "bad base64"
-        return ""
-    kids = node.get("children", [])
-    if not isinstance(kids, list):
-        return "bad children"
-    for kid in kids:
-        bad = check_node(kid)
-        if bad != "":
-            return bad
-    return ""
+        return check_file(node)
+    return check_dir(node)
 
 
 def load_vfs(path):
@@ -153,7 +162,7 @@ def count_vfs(node):
 
 def find_node(root, path):
     """Найти узел по пути."""
-    if path == "" or path == "/":
+    if path in ["", "/"]:
         return root
     parts = [p for p in path.split("/") if p != ""]
     node = root
@@ -170,20 +179,120 @@ def find_node(root, path):
     return node
 
 
+def get_root():
+    """Взять корень VFS."""
+    if vfs_root is None:
+        return empty_root()
+    return vfs_root
+
+
+def join_path(cur, arg):
+    """Склеить путь с текущей папкой."""
+    if arg.startswith("/"):
+        full = arg
+    else:
+        if cur == "/":
+            full = "/" + arg
+        else:
+            full = cur + "/" + arg
+    parts = []
+    for p in full.split("/"):
+        if p in ["", "."]:
+            continue
+        if p == "..":
+            if parts != []:
+                parts = parts[:len(parts) - one]
+        else:
+            parts.append(p)
+    if parts == []:
+        return "/"
+    return "/" + "/".join(parts)
+
+
+def make_prompt():
+    """Собрать приглашение с текущей папкой."""
+    return my_user + "@" + my_host + ":" + cur_dir + "$ "
+
+
 def run_ls(args):
-    """Заглушка ls."""
+    """Настоящий ls по папкам VFS."""
+    if len(args) > max_ls:
+        return "ls: too many arguments"
     if args == []:
-        return "ls"
-    return "ls: " + " ".join(args)
+        path = cur_dir
+    else:
+        path = join_path(cur_dir, args[0])
+    node = find_node(get_root(), path)
+    if node is None:
+        return "ls: no such file or directory: " + path
+    if node.get("type", "") == "file":
+        return node.get("name", "")
+    names = []
+    for kid in node.get("children", []):
+        name = kid.get("name", "")
+        if kid.get("type", "") == "dir":
+            names.append(name + "/")
+        else:
+            names.append(name)
+    if names == []:
+        return "empty"
+    return " ".join(names)
 
 
 def run_cd(args):
-    """Заглушка cd."""
+    """Настоящий cd по папкам VFS."""
+    global cur_dir, prompt
     if len(args) > max_cd:
         return "cd: too many arguments"
     if args == []:
-        return "cd"
-    return "cd: " + " ".join(args)
+        path = "/"
+    else:
+        path = join_path(cur_dir, args[0])
+    node = find_node(get_root(), path)
+    if node is None:
+        return "cd: no such file or directory: " + path
+    if node.get("type", "") != "dir":
+        return "cd: not a directory: " + path
+    cur_dir = path
+    prompt = make_prompt()
+    return ""
+
+
+def run_pwd(args):
+    """Показать текущую папку."""
+    if args != []:
+        return "pwd: too many arguments"
+    return cur_dir
+
+
+def tree_lines(node, prefix):
+    """Строки дерева для узла."""
+    lines = []
+    for kid in node.get("children", []):
+        name = kid.get("name", "")
+        if kid.get("type", "") == "dir":
+            lines.append(prefix + name + "/")
+            lines = lines + tree_lines(kid, prefix + "  ")
+        else:
+            lines.append(prefix + name)
+    return lines
+
+
+def run_tree(args):
+    """Показать дерево папок."""
+    if len(args) > max_tree:
+        return "tree: too many arguments"
+    if args == []:
+        path = cur_dir
+    else:
+        path = join_path(cur_dir, args[0])
+    node = find_node(get_root(), path)
+    if node is None:
+        return "tree: no such file or directory: " + path
+    if node.get("type", "") == "file":
+        return node.get("name", "")
+    lines = [path] + tree_lines(node, "  ")
+    return "\n".join(lines)
 
 
 def handle(s):
@@ -195,6 +304,10 @@ def handle(s):
         return run_ls(args), False
     if cmd == "cd":
         return run_cd(args), False
+    if cmd == "pwd":
+        return run_pwd(args), False
+    if cmd == "tree":
+        return run_tree(args), False
     if cmd == "exit":
         if len(args) > max_exit:
             return "exit: too many arguments", False
@@ -209,6 +322,10 @@ def is_error(out):
     if "unknown command" in out:
         return True
     if "too many arguments" in out:
+        return True
+    if "no such file" in out:
+        return True
+    if "not a directory" in out:
         return True
     if out.startswith("error"):
         return True
@@ -322,11 +439,61 @@ def run_script_file(path):
     return False
 
 
+def setup_window():
+    """Создать окно эмулятора."""
+    global window, text, entry
+    window = tk.Tk()
+    window.title("Эмулятор - [" + my_user + "@" + my_host + "]")
+    text = tk.Text(window, state=tk.DISABLED)
+    text.pack(fill=tk.BOTH, expand=True)
+    entry = tk.Entry(window)
+    entry.pack(fill=tk.X)
+    entry.bind("<Return>", on_press)
+    show(prompt + "ready, type ls, cd, pwd, tree or exit")
+    show("VFS=" + vfs_path + " LOG=" + log_path)
+
+
+def load_vfs_show():
+    """Загрузить VFS и показать результат."""
+    global vfs_root
+    if vfs_path == "":
+        vfs_root = empty_root()
+        show("VFS empty, run with --vfs file.json")
+        return
+    root, err = load_vfs(vfs_path)
+    if err != "":
+        show(err)
+        print(err)
+        add_log("vfs " + vfs_path, err)
+        vfs_root = empty_root()
+        return
+    vfs_root = root
+    found_dirs, found_files = count_vfs(vfs_root)
+    msg = "VFS loaded: " + str(found_dirs)
+    msg = msg + " dirs, " + str(found_files)
+    msg = msg + " files from " + vfs_path
+    show(msg)
+    print(msg)
+    add_log("vfs " + vfs_path, msg)
+
+
+def run_start_script(script_path):
+    """Выполнить стартовый скрипт."""
+    if script_path == "":
+        return
+    show(prompt + "run script: " + script_path)
+    bad = run_script_file(script_path)
+    if bad:
+        show("script finished with error")
+    else:
+        show("script finished ok")
+
+
 def main():
     """Запустить окно."""
     global window, text, entry, prompt
     global log_path, vfs_path, log_events
-    global vfs_root, cur_dir
+    global vfs_root, cur_dir, my_user, my_host
     args = parse_args(sys.argv[1:])
     vfs_path = args["vfs"]
     log_path = args["log"]
@@ -335,45 +502,13 @@ def main():
     print("Log: " + log_path)
     print("Script: " + script_path)
     log_events = []
-    user = get_user()
-    host = get_host()
-    prompt = user + "@" + host + ":~$ "
-    window = tk.Tk()
-    window.title("Эмулятор - [" + user + "@" + host + "]")
-    text = tk.Text(window, state=tk.DISABLED)
-    text.pack(fill=tk.BOTH, expand=True)
-    entry = tk.Entry(window)
-    entry.pack(fill=tk.X)
-    entry.bind("<Return>", on_press)
-    show(prompt + "ready, type ls, cd or exit")
-    show("VFS=" + vfs_path + " LOG=" + log_path)
-    if vfs_path == "":
-        vfs_root = empty_root()
-        show("VFS empty, run with --vfs file.json")
-    else:
-        root, err = load_vfs(vfs_path)
-        if err != "":
-            show(err)
-            print(err)
-            add_log("vfs " + vfs_path, err)
-            vfs_root = empty_root()
-        else:
-            vfs_root = root
-            found_dirs, found_files = count_vfs(vfs_root)
-            msg = "VFS loaded: " + str(found_dirs)
-            msg = msg + " dirs, " + str(found_files)
-            msg = msg + " files from " + vfs_path
-            show(msg)
-            print(msg)
-            add_log("vfs " + vfs_path, msg)
+    my_user = get_user()
+    my_host = get_host()
     cur_dir = "/"
-    if script_path != "":
-        show(prompt + "run script: " + script_path)
-        bad = run_script_file(script_path)
-        if bad:
-            show("script finished with error")
-        else:
-            show("script finished ok")
+    prompt = make_prompt()
+    setup_window()
+    load_vfs_show()
+    run_start_script(script_path)
     entry.focus_set()
     window.mainloop()
 

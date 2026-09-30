@@ -1,16 +1,27 @@
-"""Тесты этапов 1, 2 и 3."""
+"""Тесты этапов 1, 2, 3 и 4."""
 
 import os
 import tempfile
 import unittest
 
+import src.main
 from src.main import count_vfs, find_node, handle, is_error
 from src.main import load_vfs, parse, parse_args
 from src.main import run_lines, save_log
 
 
+def make_root():
+    """Собрать маленькую VFS для тестов."""
+    return {"type": "dir", "name": "/", "children": [
+        {"type": "dir", "name": "home", "children": [
+            {"type": "dir", "name": "user", "children": [
+                {"type": "file", "name": "f.txt",
+                 "content": "x"}]}]},
+        {"type": "file", "name": "a.txt", "content": "A"}]}
+
+
 class TestStage1(unittest.TestCase):
-    """Проверка заглушек."""
+    """Проверка парсера и выхода."""
 
     def test_parse(self):
         """Парсер делит команду и аргументы."""
@@ -18,14 +29,10 @@ class TestStage1(unittest.TestCase):
         self.assertEqual(cmd, "ls")
         self.assertEqual(args, ["/tmp", "home"])
 
-    def test_ls(self):
-        """Ls выводит имя и аргументы."""
-        out, flag = handle("ls a b")
-        self.assertEqual(out, "ls: a b")
-        self.assertFalse(flag)
-
     def test_cd_error(self):
         """Cd с двумя аргументами дает ошибку."""
+        src.main.vfs_root = make_root()
+        src.main.cur_dir = "/"
         out, flag = handle("cd a b")
         self.assertIn("too many", out)
         self.assertFalse(flag)
@@ -66,13 +73,15 @@ class TestStage2(unittest.TestCase):
         """Ошибки находятся."""
         self.assertTrue(is_error("error: unknown command"))
         self.assertTrue(is_error("cd: too many arguments"))
-        self.assertFalse(is_error("ls: a"))
+        self.assertTrue(is_error("ls: no such file"))
+        self.assertTrue(is_error("cd: not a directory"))
+        self.assertFalse(is_error("readme.txt home/"))
         self.assertFalse(is_error(""))
 
     def test_script_stop(self):
         """Скрипт останавливается на ошибке."""
-        done = run_lines(["ls a", "foo", "ls b"])
-        self.assertEqual(len(done), len(["ls a", "foo"]))
+        done = run_lines(["pwd", "foo", "ls"])
+        self.assertEqual(len(done), len(["pwd", "foo"]))
         self.assertIn("unknown", done[1][1])
 
     def test_log_file(self):
@@ -166,6 +175,84 @@ class TestStage3(unittest.TestCase):
         self.assertEqual(root, None)
         self.assertIn("bad base64", err)
         os.remove(bad)
+
+
+class TestStage4(unittest.TestCase):
+    """Проверка ls, cd, pwd, tree."""
+
+    def setUp(self):
+        """Готовить VFS перед тестом."""
+        src.main.vfs_root = make_root()
+        src.main.cur_dir = "/"
+        src.main.prompt = src.main.make_prompt()
+
+    def test_ls_root(self):
+        """Ls корня показывает папки и файлы."""
+        out, flag = handle("ls")
+        self.assertIn("home/", out)
+        self.assertIn("a.txt", out)
+        self.assertFalse(flag)
+
+    def test_ls_deep(self):
+        """Ls папки показывает ее файлы."""
+        out, flag = handle("ls /home/user")
+        self.assertEqual(out, "f.txt")
+        self.assertFalse(flag)
+
+    def test_ls_file(self):
+        """Ls файла показывает его имя."""
+        out, flag = handle("ls /a.txt")
+        self.assertEqual(out, "a.txt")
+
+    def test_ls_missing(self):
+        """Ls нет папки дает ошибку."""
+        out, flag = handle("ls /nope")
+        self.assertIn("no such file", out)
+        self.assertFalse(flag)
+
+    def test_cd_pwd(self):
+        """Cd меняет папку, pwd показывает."""
+        out, flag = handle("cd /home/user")
+        self.assertEqual(out, "")
+        self.assertFalse(flag)
+        out, flag = handle("pwd")
+        self.assertEqual(out, "/home/user")
+
+    def test_cd_relative(self):
+        """Cd понимает относительный путь."""
+        src.main.cur_dir = "/home"
+        out, flag = handle("cd user")
+        self.assertEqual(out, "")
+        self.assertEqual(src.main.cur_dir, "/home/user")
+
+    def test_cd_dotdot(self):
+        """Cd .. идет наверх."""
+        src.main.cur_dir = "/home/user"
+        out, flag = handle("cd ..")
+        self.assertEqual(out, "")
+        self.assertEqual(src.main.cur_dir, "/home")
+
+    def test_cd_errors(self):
+        """Cd в файл и в никуда дает ошибку."""
+        out, flag = handle("cd /a.txt")
+        self.assertIn("not a directory", out)
+        self.assertFalse(flag)
+        out, flag = handle("cd /nope")
+        self.assertIn("no such file", out)
+        self.assertEqual(src.main.cur_dir, "/")
+
+    def test_tree(self):
+        """Tree показывает дерево."""
+        out, flag = handle("tree /home")
+        self.assertIn("user/", out)
+        self.assertIn("f.txt", out)
+        self.assertFalse(flag)
+
+    def test_pwd_args(self):
+        """Pwd с аргументами дает ошибку."""
+        out, flag = handle("pwd x")
+        self.assertIn("too many", out)
+        self.assertFalse(flag)
 
 
 if __name__ == "__main__":

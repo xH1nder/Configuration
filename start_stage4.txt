@@ -1,0 +1,12 @@
+pwd
+ls
+ls /home/user/docs
+ls /readme.txt
+cd /home/user
+pwd
+ls
+tree /home
+tree
+cd ..
+pwd
+ls /nope
