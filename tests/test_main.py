@@ -75,6 +75,10 @@ class TestStage2(unittest.TestCase):
         self.assertTrue(is_error("cd: too many arguments"))
         self.assertTrue(is_error("ls: no such file"))
         self.assertTrue(is_error("cd: not a directory"))
+        self.assertTrue(is_error("rmdir: missing operand"))
+        self.assertTrue(is_error("rmdir: cannot remove"))
+        self.assertTrue(is_error("cp: cannot stat"))
+        self.assertTrue(is_error("cp: same file"))
         self.assertFalse(is_error("readme.txt home/"))
         self.assertFalse(is_error(""))
 
@@ -252,6 +256,106 @@ class TestStage4(unittest.TestCase):
         """Pwd с аргументами дает ошибку."""
         out, flag = handle("pwd x")
         self.assertIn("too many", out)
+        self.assertFalse(flag)
+
+
+def make_root5():
+    """Собрать VFS для тестов этапа 5."""
+    return {"type": "dir", "name": "/", "children": [
+        {"type": "file", "name": "a.txt", "content": "A"},
+        {"type": "dir", "name": "empty", "children": []},
+        {"type": "dir", "name": "full", "children": [
+            {"type": "file", "name": "x.txt",
+             "content": "X"}]}]}
+
+
+class TestStage5(unittest.TestCase):
+    """Проверка rmdir и cp."""
+
+    def setUp(self):
+        """Готовить VFS перед тестом."""
+        src.main.vfs_root = make_root5()
+        src.main.cur_dir = "/"
+        src.main.prompt = src.main.make_prompt()
+
+    def test_rmdir_ok(self):
+        """Пустая папка удаляется."""
+        out, flag = handle("rmdir empty")
+        self.assertEqual(out, "")
+        self.assertFalse(flag)
+        self.assertEqual(src.main.find_node(
+            src.main.vfs_root, "/empty"), None)
+
+    def test_rmdir_full(self):
+        """Непустая папка не удаляется."""
+        out, flag = handle("rmdir full")
+        self.assertIn("not empty", out)
+        self.assertFalse(flag)
+
+    def test_rmdir_file(self):
+        """Файл удалить как папку нельзя."""
+        out, flag = handle("rmdir a.txt")
+        self.assertIn("not a directory", out)
+        self.assertFalse(flag)
+
+    def test_rmdir_args(self):
+        """Rmdir без аргументов и в никуда ошибка."""
+        out, flag = handle("rmdir")
+        self.assertIn("missing operand", out)
+        self.assertFalse(flag)
+        out, flag = handle("rmdir /nope")
+        self.assertIn("no such file", out)
+        self.assertEqual(src.main.cur_dir, "/")
+
+    def test_cp_ok(self):
+        """Файл копируется под новым именем."""
+        out, flag = handle("cp a.txt b.txt")
+        self.assertEqual(out, "")
+        self.assertFalse(flag)
+        node = src.main.find_node(src.main.vfs_root, "/b.txt")
+        self.assertNotEqual(node, None)
+        self.assertEqual(node["content"], "A")
+
+    def test_cp_into_dir(self):
+        """Файл копируется внутрь папки."""
+        out, flag = handle("cp a.txt empty")
+        self.assertEqual(out, "")
+        node = src.main.find_node(
+            src.main.vfs_root, "/empty/a.txt")
+        self.assertNotEqual(node, None)
+
+    def test_cp_overwrite(self):
+        """Файл перезаписывается копией."""
+        handle("cp a.txt b.txt")
+        out, flag = handle("cp full/x.txt b.txt")
+        self.assertEqual(out, "")
+        node = src.main.find_node(src.main.vfs_root, "/b.txt")
+        self.assertEqual(node["content"], "X")
+
+    def test_cp_missing_src(self):
+        """Нет исходника дает ошибку."""
+        out, flag = handle("cp /nope /b.txt")
+        self.assertIn("cannot stat", out)
+        self.assertFalse(flag)
+
+    def test_cp_dir_src(self):
+        """Папку копировать нельзя."""
+        out, flag = handle("cp full /b.txt")
+        self.assertIn("cannot copy directory", out)
+        self.assertFalse(flag)
+
+    def test_cp_args(self):
+        """Cp без аргументов и с лишними ошибка."""
+        out, flag = handle("cp a.txt")
+        self.assertIn("missing operand", out)
+        self.assertFalse(flag)
+        out, flag = handle("cp a b c")
+        self.assertIn("too many", out)
+
+    def test_cp_same(self):
+        """Копия в себя дает ошибку."""
+        out, flag = handle("cp a.txt a.txt")
+        self.assertIn("same file", out)
         self.assertFalse(flag)
 
 

@@ -13,6 +13,8 @@ max_exit = 0
 max_ls = 1
 max_tree = 1
 max_pwd = 0
+max_rmdir = 1
+max_cp = 2
 empty_count = 0
 one = 1
 my_user = "user"
@@ -295,6 +297,131 @@ def run_tree(args):
     return "\n".join(lines)
 
 
+def split_path(path):
+    """Разбить путь на папку и имя."""
+    parts = [p for p in path.split("/") if p != ""]
+    if parts == []:
+        return "/", ""
+    name = parts[len(parts) - one]
+    if len(parts) - one == empty_count:
+        return "/", name
+    parent = "/" + "/".join(parts[:len(parts) - one])
+    return parent, name
+
+
+def copy_file_node(src_node, new_name):
+    """Сделать копию файлового узла."""
+    new_node = {"type": "file", "name": new_name}
+    if "content" in src_node:
+        new_node["content"] = src_node["content"]
+    if "encoding" in src_node:
+        new_node["encoding"] = src_node["encoding"]
+    return new_node
+
+
+def find_child(dir_node, name):
+    """Найти ребенка по имени."""
+    for kid in dir_node.get("children", []):
+        if kid.get("name", "") == name:
+            return kid
+    return None
+
+
+def run_rmdir(args):
+    """Удалить пустую папку из VFS в памяти."""
+    if args == []:
+        return "rmdir: missing operand"
+    if len(args) > max_rmdir:
+        return "rmdir: too many arguments"
+    path = join_path(cur_dir, args[0])
+    if path == "/":
+        return "rmdir: cannot remove '/'"
+    node = find_node(get_root(), path)
+    if node is None:
+        msg = "rmdir: cannot remove '" + path + "'"
+        return msg + ": no such file or directory"
+    if node.get("type", "") != "dir":
+        msg = "rmdir: cannot remove '" + path + "'"
+        return msg + ": not a directory"
+    if node.get("children", []) != []:
+        msg = "rmdir: cannot remove '" + path + "'"
+        return msg + ": directory not empty"
+    parent_path, name = split_path(path)
+    parent = find_node(get_root(), parent_path)
+    parent["children"].remove(node)
+    return ""
+
+
+def run_cp(args):
+    """Скопировать файл в памяти."""
+    if args == []:
+        return "cp: missing operand"
+    if len(args) > max_cp:
+        return "cp: too many arguments"
+    if len(args) < max_cp:
+        return "cp: missing operand"
+    src_path = join_path(cur_dir, args[0])
+    dst_path = join_path(cur_dir, args[1])
+    src_node = find_node(get_root(), src_path)
+    if src_node is None:
+        msg = "cp: cannot stat '" + src_path + "'"
+        return msg + ": no such file or directory"
+    if src_node.get("type", "") != "file":
+        return "cp: cannot copy directory '" + src_path + "'"
+    if src_path == dst_path:
+        msg = "cp: '" + args[0] + "' and '" + args[1] + "'"
+        return msg + " are the same file"
+    return cp_finish(src_node, dst_path)
+
+
+def cp_finish(src_node, dst_path):
+    """Дописать копию в место назначения."""
+    dst_node = find_node(get_root(), dst_path)
+    if dst_node is None:
+        parent_path, name = split_path(dst_path)
+        parent = find_node(get_root(), parent_path)
+        if parent is None:
+            msg = "cp: cannot create '" + dst_path + "'"
+            return msg + ": no such file or directory"
+        if parent.get("type", "") != "dir":
+            msg = "cp: cannot create '" + dst_path + "'"
+            return msg + ": not a directory"
+        parent["children"].append(copy_file_node(src_node, name))
+        return ""
+    if dst_node.get("type", "") == "dir":
+        return cp_into_dir(src_node, dst_node, dst_path)
+    return cp_over_file(src_node, dst_node, dst_path)
+
+
+def cp_into_dir(src_node, dst_node, dst_path):
+    """Скопировать файл внутрь папки."""
+    name = src_node.get("name", "")
+    old = find_child(dst_node, name)
+    if old is None:
+        dst_node["children"].append(copy_file_node(src_node, name))
+        return ""
+    if old is src_node:
+        return "cp: source and destination are the same file"
+    if old.get("type", "") == "dir":
+        msg = "cp: cannot overwrite directory '" + dst_path
+        return msg + "/" + name + "'"
+    dst_node["children"].remove(old)
+    dst_node["children"].append(copy_file_node(src_node, name))
+    return ""
+
+
+def cp_over_file(src_node, dst_node, dst_path):
+    """Перезаписать файл копией."""
+    parent_path, name = split_path(dst_path)
+    parent = find_node(get_root(), parent_path)
+    if parent is None:
+        msg = "cp: cannot create '" + dst_path + "'"
+        return msg + ": no such file or directory"
+    parent["children"].remove(dst_node)
+    parent["children"].append(copy_file_node(src_node, name))
+    return ""
+
+
 def handle(s):
     """Выполнить команду."""
     cmd, args = parse(s)
@@ -308,6 +435,10 @@ def handle(s):
         return run_pwd(args), False
     if cmd == "tree":
         return run_tree(args), False
+    if cmd == "rmdir":
+        return run_rmdir(args), False
+    if cmd == "cp":
+        return run_cp(args), False
     if cmd == "exit":
         if len(args) > max_exit:
             return "exit: too many arguments", False
@@ -319,14 +450,15 @@ def is_error(out):
     """Понять что вывод это ошибка."""
     if out == "":
         return False
-    if "unknown command" in out:
-        return True
-    if "too many arguments" in out:
-        return True
-    if "no such file" in out:
-        return True
-    if "not a directory" in out:
-        return True
+    keys = ["unknown command", "too many arguments"]
+    keys = keys + ["no such file", "not a directory"]
+    keys = keys + ["missing operand", "cannot remove"]
+    keys = keys + ["cannot stat", "cannot copy"]
+    keys = keys + ["cannot create", "cannot overwrite"]
+    keys = keys + ["not empty", "same file"]
+    for key in keys:
+        if key in out:
+            return True
     if out.startswith("error"):
         return True
     return False

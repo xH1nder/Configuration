@@ -1,0 +1,16 @@
+{
+  "type": "dir",
+  "name": "/",
+  "children": [
+    {"type": "file", "name": "readme.txt",
+     "content": "Stage5 VFS root file"},
+    {"type": "dir", "name": "empty", "children": []},
+    {"type": "dir", "name": "docs",
+     "children": [
+       {"type": "file", "name": "a.txt", "content": "A"},
+       {"type": "file", "name": "photo.bin",
+        "encoding": "base64",
+        "content": "aGVsbG8="}
+     ]}
+  ]
+}

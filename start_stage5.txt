@@ -1,0 +1,12 @@
+pwd
+ls
+tree
+cp readme.txt copy.txt
+cp docs/a.txt empty_copy.txt
+ls
+cp copy.txt docs/
+ls docs
+rmdir empty
+ls
+rmdir docs
+pwd
