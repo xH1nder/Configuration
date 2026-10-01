@@ -1,4 +1,4 @@
-"""Тесты этапов 1, 2, 3 и 4."""
+"""Тесты этапов 1, 2, 3, 4 и 5."""
 
 import os
 import tempfile
@@ -18,6 +18,13 @@ def make_root():
                 {"type": "file", "name": "f.txt",
                  "content": "x"}]}]},
         {"type": "file", "name": "a.txt", "content": "A"}]}
+
+
+def reset_state(root):
+    """Готовить VFS перед тестом."""
+    src.main.vfs_root = root
+    src.main.cur_dir = "/"
+    src.main.prompt = src.main.make_prompt()
 
 
 class TestStage1(unittest.TestCase):
@@ -184,14 +191,9 @@ class TestStage3(unittest.TestCase):
 class TestStage4(unittest.TestCase):
     """Проверка ls, cd, pwd, tree."""
 
-    def setUp(self):
-        """Готовить VFS перед тестом."""
-        src.main.vfs_root = make_root()
-        src.main.cur_dir = "/"
-        src.main.prompt = src.main.make_prompt()
-
     def test_ls_root(self):
         """Ls корня показывает папки и файлы."""
+        reset_state(make_root())
         out, flag = handle("ls")
         self.assertIn("home/", out)
         self.assertIn("a.txt", out)
@@ -199,23 +201,27 @@ class TestStage4(unittest.TestCase):
 
     def test_ls_deep(self):
         """Ls папки показывает ее файлы."""
+        reset_state(make_root())
         out, flag = handle("ls /home/user")
         self.assertEqual(out, "f.txt")
         self.assertFalse(flag)
 
     def test_ls_file(self):
         """Ls файла показывает его имя."""
+        reset_state(make_root())
         out, flag = handle("ls /a.txt")
         self.assertEqual(out, "a.txt")
 
     def test_ls_missing(self):
         """Ls нет папки дает ошибку."""
+        reset_state(make_root())
         out, flag = handle("ls /nope")
         self.assertIn("no such file", out)
         self.assertFalse(flag)
 
     def test_cd_pwd(self):
         """Cd меняет папку, pwd показывает."""
+        reset_state(make_root())
         out, flag = handle("cd /home/user")
         self.assertEqual(out, "")
         self.assertFalse(flag)
@@ -224,6 +230,7 @@ class TestStage4(unittest.TestCase):
 
     def test_cd_relative(self):
         """Cd понимает относительный путь."""
+        reset_state(make_root())
         src.main.cur_dir = "/home"
         out, flag = handle("cd user")
         self.assertEqual(out, "")
@@ -231,6 +238,7 @@ class TestStage4(unittest.TestCase):
 
     def test_cd_dotdot(self):
         """Cd .. идет наверх."""
+        reset_state(make_root())
         src.main.cur_dir = "/home/user"
         out, flag = handle("cd ..")
         self.assertEqual(out, "")
@@ -238,6 +246,7 @@ class TestStage4(unittest.TestCase):
 
     def test_cd_errors(self):
         """Cd в файл и в никуда дает ошибку."""
+        reset_state(make_root())
         out, flag = handle("cd /a.txt")
         self.assertIn("not a directory", out)
         self.assertFalse(flag)
@@ -247,6 +256,7 @@ class TestStage4(unittest.TestCase):
 
     def test_tree(self):
         """Tree показывает дерево."""
+        reset_state(make_root())
         out, flag = handle("tree /home")
         self.assertIn("user/", out)
         self.assertIn("f.txt", out)
@@ -254,6 +264,7 @@ class TestStage4(unittest.TestCase):
 
     def test_pwd_args(self):
         """Pwd с аргументами дает ошибку."""
+        reset_state(make_root())
         out, flag = handle("pwd x")
         self.assertIn("too many", out)
         self.assertFalse(flag)
@@ -272,14 +283,9 @@ def make_root5():
 class TestStage5(unittest.TestCase):
     """Проверка rmdir и cp."""
 
-    def setUp(self):
-        """Готовить VFS перед тестом."""
-        src.main.vfs_root = make_root5()
-        src.main.cur_dir = "/"
-        src.main.prompt = src.main.make_prompt()
-
     def test_rmdir_ok(self):
         """Пустая папка удаляется."""
+        reset_state(make_root5())
         out, flag = handle("rmdir empty")
         self.assertEqual(out, "")
         self.assertFalse(flag)
@@ -288,18 +294,21 @@ class TestStage5(unittest.TestCase):
 
     def test_rmdir_full(self):
         """Непустая папка не удаляется."""
+        reset_state(make_root5())
         out, flag = handle("rmdir full")
         self.assertIn("not empty", out)
         self.assertFalse(flag)
 
     def test_rmdir_file(self):
         """Файл удалить как папку нельзя."""
+        reset_state(make_root5())
         out, flag = handle("rmdir a.txt")
         self.assertIn("not a directory", out)
         self.assertFalse(flag)
 
     def test_rmdir_args(self):
         """Rmdir без аргументов и в никуда ошибка."""
+        reset_state(make_root5())
         out, flag = handle("rmdir")
         self.assertIn("missing operand", out)
         self.assertFalse(flag)
@@ -309,6 +318,7 @@ class TestStage5(unittest.TestCase):
 
     def test_cp_ok(self):
         """Файл копируется под новым именем."""
+        reset_state(make_root5())
         out, flag = handle("cp a.txt b.txt")
         self.assertEqual(out, "")
         self.assertFalse(flag)
@@ -318,6 +328,7 @@ class TestStage5(unittest.TestCase):
 
     def test_cp_into_dir(self):
         """Файл копируется внутрь папки."""
+        reset_state(make_root5())
         out, flag = handle("cp a.txt empty")
         self.assertEqual(out, "")
         node = src.main.find_node(
@@ -326,6 +337,7 @@ class TestStage5(unittest.TestCase):
 
     def test_cp_overwrite(self):
         """Файл перезаписывается копией."""
+        reset_state(make_root5())
         handle("cp a.txt b.txt")
         out, flag = handle("cp full/x.txt b.txt")
         self.assertEqual(out, "")
@@ -334,18 +346,21 @@ class TestStage5(unittest.TestCase):
 
     def test_cp_missing_src(self):
         """Нет исходника дает ошибку."""
+        reset_state(make_root5())
         out, flag = handle("cp /nope /b.txt")
         self.assertIn("cannot stat", out)
         self.assertFalse(flag)
 
     def test_cp_dir_src(self):
         """Папку копировать нельзя."""
+        reset_state(make_root5())
         out, flag = handle("cp full /b.txt")
         self.assertIn("cannot copy directory", out)
         self.assertFalse(flag)
 
     def test_cp_args(self):
         """Cp без аргументов и с лишними ошибка."""
+        reset_state(make_root5())
         out, flag = handle("cp a.txt")
         self.assertIn("missing operand", out)
         self.assertFalse(flag)
@@ -354,6 +369,7 @@ class TestStage5(unittest.TestCase):
 
     def test_cp_same(self):
         """Копия в себя дает ошибку."""
+        reset_state(make_root5())
         out, flag = handle("cp a.txt a.txt")
         self.assertIn("same file", out)
         self.assertFalse(flag)
